@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>근무시간 기록</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <div class="topbar">
+      <div>
+        <div class="branch" id="branch">불러오는 중…</div>
+        <div class="muted" id="who"></div>
+      </div>
+      <button class="ghost small" id="logout" type="button">로그아웃</button>
+    </div>
+
+    <section class="card">
+      <div class="datebar">
+        <button class="ghost" id="prev" type="button" aria-label="전날">◀</button>
+        <input id="date" type="date" aria-label="날짜">
+        <button class="ghost" id="next" type="button" aria-label="다음 날">▶</button>
+      </div>
+      <p class="muted" id="dayLabel" style="text-align:center;margin:8px 0 0"></p>
+    </section>
+
+    <section class="card">
+      <h2>오늘 기록</h2>
+      <div id="people"></div>
+      <p class="muted" id="noStaff" hidden>아직 직원이 없어요. 아래 '직원 관리'에서 먼저 직원을 추가해 주세요.</p>
+      <p class="muted" style="margin-top:12px">일한 시간 = 퇴근 시각 − 출근 시각. 휴게시간은 빼지 않아요. 퇴근이 출근보다 이르면 다음 날 퇴근으로 계산해요. 두 칸을 모두 비우고 저장하면 그날 기록이 지워져요.</p>
+    </section>
+
+    <section class="card">
+      <h2 id="monthTitle">이번 달 합계</h2>
+      <div id="totals"></div>
+      <div class="grand"><span>지점 전체</span><span class="num" id="grand">0시간</span></div>
+      <p class="muted" style="margin-top:10px">총 근무시간만 보여 줘요. 급여·주휴수당·세금은 계산하지 않아요.</p>
+    </section>
+
+    <section class="card">
+      <h2>직원 관리</h2>
+      <form id="addStaff" class="inline" novalidate>
+        <input name="name" type="text" maxlength="30" placeholder="직원 이름" aria-label="직원 이름">
+        <button type="submit">추가</button>
+      </form>
+      <p class="msg" id="staffMsg" role="status"></p>
+      <div id="staffList"></div>
+    </section>
+
+    <footer class="muted"><a href="/privacy">개인정보 처리방침</a></footer>
+  </main>
+
+  <div class="savebar">
+    <div class="inner">
+      <button class="full" id="save" type="button">기록 저장</button>
+      <p class="msg" id="saveMsg" role="status"></p>
+    </div>
+  </div>
+
+  <script src="/assets/auth.js"></script>
+  <script>
+    if (!Auth.session()) location.replace('/');
+
+    const $ = (id) => document.getElementById(id);
+    const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+    let state = { staff: [], shifts: [], date: '', month: '' };
+    let dirty = false;
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+    const shiftDate = (s, n) => { const [y, m, d] = s.split('-').map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; };
+    const hm = (min) => { const h = Math.floor(min / 60), m = min % 60; return m ? `${h}시간 ${m}분` : `${h}시간`; };
+    const between = (s, e) => {
+      if (!s || !e) return null;
+      const [sh, sm] = s.split(':').map(Number), [eh, em] = e.split(':').map(Number);
+      let d = eh * 60 + em - (sh * 60 + sm);
+      if (d < 0) d += 1440;
+      return d === 0 ? null : d;
+    };
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function setMsg(el, text, kind) { el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+    async function load(date) {
+      setMsg($('saveMsg'), '불러오는 중…');
+      try {
+        const j = await Auth.api('/api/data?date=' + encodeURIComponent(date));
+        state = j;
+        dirty = false;
+        render();
+        setMsg($('saveMsg'), '');
+      } catch (err) {
+        setMsg($('saveMsg'), err.message, 'err');
+      }
+    }
+
+    function render() {
+      $('branch').textContent = state.branch.name;
+      $('who').textContent = state.email;
+      $('date').value = state.date;
+      const [y, m, d] = state.date.split('-').map(Number);
+      const dow = DAYS[new Date(y, m - 1, d).getDay()];
+      $('dayLabel').textContent = `${m}월 ${d}일 (${dow})` + (state.date === todayStr() ? ' · 오늘' : '');
+
+      // 오늘 기록
+      const active = state.staff.filter((s) => s.active);
+      const dayMap = new Map(state.shifts.filter((s) => s.work_date === state.date).map((s) => [s.staff_id, s]));
+      // 그만둔 직원이라도 이날 기록이 있으면 보여 준다
+      const shown = state.staff.filter((s) => s.active || dayMap.has(s.id));
+      $('noStaff').hidden = shown.length > 0;
+      $('people').innerHTML = shown.map((s) => {
+        const r = dayMap.get(s.id);
+        const st = r ? r.start_time.slice(0, 5) : '', en = r ? r.end_time.slice(0, 5) : '';
+        const mins = between(st, en);
+        return `<div class="person" data-id="${s.id}">
+          <div class="person-head"><span class="person-name">${esc(s.name)}</span><span class="person-hours">${mins ? hm(mins) : ''}</span></div>
+          <div class="times">
+            <div><label for="s${s.id}">출근</label><input id="s${s.id}" type="time" value="${st}" data-k="start"></div>
+            <div><label for="e${s.id}">퇴근</label><input id="e${s.id}" type="time" value="${en}" data-k="end"></div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // 이번 달 합계
+      $('monthTitle').textContent = `${m}월 합계`;
+      const sum = new Map(), days = new Map();
+      for (const s of state.shifts) {
+        sum.set(s.staff_id, (sum.get(s.staff_id) || 0) + s.minutes);
+        days.set(s.staff_id, (days.get(s.staff_id) || 0) + 1);
+      }
+      const rows = state.staff.filter((s) => s.active || sum.has(s.id));
+      $('totals').innerHTML = rows.length ? rows.map((s) => `<div class="total-row">
+          <div><div>${esc(s.name)}</div><div class="sub">${days.get(s.id) || 0}일 기록</div></div>
+          <div class="num">${hm(sum.get(s.id) || 0)}</div></div>`).join('') : '<p class="muted">아직 기록이 없어요.</p>';
+      $('grand').textContent = hm([...sum.values()].reduce((a, b) => a + b, 0));
+
+      // 직원 관리
+      $('staffList').innerHTML = state.staff.map((s) => `<div class="list-row">
+          <span>${esc(s.name)} ${s.active ? '' : '<span class="tag">· 그만둠</span>'}</span>
+          <button class="ghost small" type="button" data-toggle="${s.id}" data-active="${s.active ? 0 : 1}">${s.active ? '그만둠 처리' : '다시 일함'}</button>
+        </div>`).join('');
+    }
+
+    // 시각을 바꾸면 그 사람 시간이 바로 다시 계산된다
+    $('people').addEventListener('input', (e) => {
+      const p = e.target.closest('.person');
+      if (!p) return;
+      dirty = true;
+      const st = p.querySelector('[data-k=start]').value, en = p.querySelector('[data-k=end]').value;
+      const mins = between(st, en);
+      p.querySelector('.person-hours').textContent = mins ? hm(mins) : '';
+      setMsg($('saveMsg'), '저장하지 않은 기록이 있어요.');
+    });
+
+    $('save').addEventListener('click', async () => {
+      const entries = [...document.querySelectorAll('.person')].map((p) => ({
+        staff_id: Number(p.dataset.id),
+        start: p.querySelector('[data-k=start]').value,
+        end: p.querySelector('[data-k=end]').value,
+      }));
+      const btn = $('save');
+      btn.disabled = true;
+      setMsg($('saveMsg'), '저장하는 중…');
+      try {
+        await Auth.api('/api/shifts', { method: 'POST', body: JSON.stringify({ date: state.date, entries }) });
+        await load(state.date);
+        setMsg($('saveMsg'), '저장했어요. 이번 달 합계도 바뀌었어요.', 'ok');
+      } catch (err) {
+        setMsg($('saveMsg'), err.message, 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    function go(date) {
+      if (!date) return;
+      if (dirty && !confirm('저장하지 않은 기록이 있어요. 그래도 다른 날로 갈까요?')) { $('date').value = state.date; return; }
+      load(date);
+    }
+    $('prev').addEventListener('click', () => go(shiftDate(state.date, -1)));
+    $('next').addEventListener('click', () => go(shiftDate(state.date, 1)));
+    $('date').addEventListener('change', (e) => go(e.target.value));
+
+    $('addStaff').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = e.target.name.value.trim();
+      if (!name) { setMsg($('staffMsg'), '직원 이름을 적어 주세요.', 'err'); return; }
+      try {
+        await Auth.api('/api/staff', { method: 'POST', body: JSON.stringify({ name }) });
+        e.target.name.value = '';
+        setMsg($('staffMsg'), `${name} 님을 추가했어요.`, 'ok');
+        await load(state.date);
+      } catch (err) { setMsg($('staffMsg'), err.message, 'err'); }
+    });
+
+    $('staffList').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-toggle]');
+      if (!b) return;
+      try {
+        await Auth.api('/api/staff', { method: 'PATCH', body: JSON.stringify({ id: Number(b.dataset.toggle), active: b.dataset.active === '1' }) });
+        setMsg($('staffMsg'), '');
+        await load(state.date);
+      } catch (err) { setMsg($('staffMsg'), err.message, 'err'); }
+    });
+
+    $('logout').addEventListener('click', () => Auth.logout());
+    window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+    if (Auth.session()) load(todayStr());
+  </script>
+</body>
+</html>

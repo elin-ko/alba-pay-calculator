@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>사장님 관리 화면</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>사장님 관리 화면</h1>
+
+    <form id="gate" class="card" novalidate>
+      <div class="field">
+        <label for="pw">관리자 비밀번호</label>
+        <input id="pw" type="password" autocomplete="current-password">
+      </div>
+      <button class="full" type="submit">들어가기</button>
+      <p id="gateMsg" class="msg err" role="alert"></p>
+    </form>
+
+    <div id="panel" hidden>
+      <section class="card">
+        <div class="topbar">
+          <h2 style="margin:0">지점별 근무시간</h2>
+          <button class="ghost small" id="out" type="button">나가기</button>
+        </div>
+        <div class="field"><input id="month" type="month" aria-label="달"></div>
+        <div id="report"></div>
+      </section>
+
+      <section class="card">
+        <h2>점장 계정</h2>
+        <div id="managers"></div>
+        <form id="addManager" novalidate style="margin-top:12px">
+          <div class="field"><label for="mEmail">점장 이메일</label><input id="mEmail" type="email" autocomplete="off"></div>
+          <div class="field"><label for="mBranch">지점</label><select id="mBranch"></select></div>
+          <button class="full" type="submit">점장 계정 만들기</button>
+        </form>
+        <div id="secretBox" hidden style="margin-top:14px">
+          <p><strong id="secretFor"></strong> 임시 비밀번호예요. 이 화면을 닫으면 다시 볼 수 없어요. 점장님께 직접 전해 주세요.</p>
+          <div class="secret" id="secret"></div>
+        </div>
+        <p class="msg" id="managerMsg" role="status"></p>
+      </section>
+
+      <section class="card">
+        <h2>지점</h2>
+        <div id="branches"></div>
+        <form id="addBranch" class="inline" novalidate style="margin-top:12px">
+          <input name="name" type="text" maxlength="40" placeholder="새 지점 이름" aria-label="새 지점 이름">
+          <button type="submit">추가</button>
+        </form>
+        <p class="msg" id="branchMsg" role="status"></p>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const KEY = 'store_hours_admin';
+    const getPw = () => { try { return sessionStorage.getItem(KEY) || ''; } catch { return ''; } };
+    const setPw = (v) => { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch {} };
+    const pad = (n) => String(n).padStart(2, '0');
+    const hm = (min) => { const h = Math.floor(min / 60), m = min % 60; return m ? `${h}시간 ${m}분` : `${h}시간`; };
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const setMsg = (el, t, k) => { el.textContent = t || ''; el.className = 'msg' + (k ? ' ' + k : ''); };
+    let data = null;
+
+    async function api(method, body, query = '') {
+      const r = await fetch('/api/admin' + query, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': getPw() },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) { lock('비밀번호가 맞지 않아요.'); throw new Error(j.error); }
+      if (!r.ok) throw new Error(j.error || '문제가 생겼어요.');
+      return j;
+    }
+
+    function lock(text) {
+      setPw('');
+      $('panel').hidden = true;
+      $('gate').hidden = false;
+      setMsg($('gateMsg'), text || '', 'err');
+      $('pw').value = '';
+      $('pw').focus();
+    }
+
+    async function load() {
+      data = await api('GET', null, '?month=' + $('month').value);
+      $('gate').hidden = true;
+      $('panel').hidden = false;
+      render();
+    }
+
+    function render() {
+      const name = new Map(data.branches.map((b) => [b.id, b.name]));
+      // 지점별 · 직원별 합계
+      const per = new Map();
+      for (const s of data.shifts) per.set(s.staff_id, (per.get(s.staff_id) || 0) + s.minutes);
+      $('report').innerHTML = data.branches.length ? data.branches.map((b) => {
+        const staff = data.staff.filter((s) => s.branch_id === b.id && (s.active || per.has(s.id)));
+        const total = staff.reduce((a, s) => a + (per.get(s.id) || 0), 0);
+        return `<div style="margin-bottom:16px">
+          <div class="grand"><span>${esc(b.name)}</span><span class="num">${hm(total)}</span></div>
+          ${staff.map((s) => `<div class="total-row"><span>${esc(s.name)}${s.active ? '' : ' <span class="tag">· 그만둠</span>'}</span><span class="num" style="font-size:18px">${hm(per.get(s.id) || 0)}</span></div>`).join('') || '<p class="muted" style="margin-top:8px">직원이 아직 없어요.</p>'}
+        </div>`;
+      }).join('') : '<p class="muted">아래에서 지점을 먼저 추가해 주세요.</p>';
+
+      $('managers').innerHTML = data.managers.length ? data.managers.map((m) => `<div class="list-row">
+          <span>${esc(m.email)}<br><span class="tag">${esc(name.get(m.branch_id) || '')}</span></span>
+          <button class="ghost small" type="button" data-reset="${m.user_id}">비밀번호 새로</button></div>`).join('') : '<p class="muted">아직 점장 계정이 없어요.</p>';
+
+      $('mBranch').innerHTML = data.branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+      $('branches').innerHTML = data.branches.map((b) => `<div class="list-row"><span>${esc(b.name)}</span><span class="tag">직원 ${data.staff.filter((s) => s.branch_id === b.id && s.active).length}명</span></div>`).join('') || '<p class="muted">아직 지점이 없어요.</p>';
+    }
+
+    function showSecret(email, pw) {
+      $('secretFor').textContent = email;
+      $('secret').textContent = pw;
+      $('secretBox').hidden = false;
+    }
+
+    $('gate').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!$('pw').value) return;
+      setPw($('pw').value);
+      setMsg($('gateMsg'), '');
+      try { await load(); } catch (err) { if (getPw()) setMsg($('gateMsg'), err.message, 'err'); }
+    });
+    $('out').addEventListener('click', () => lock(''));
+    $('month').addEventListener('change', () => load().catch((err) => alert(err.message)));
+
+    $('addBranch').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const n = e.target.name.value.trim();
+      if (!n) return setMsg($('branchMsg'), '지점 이름을 적어 주세요.', 'err');
+      try { await api('POST', { action: 'branch', name: n }); e.target.name.value = ''; setMsg($('branchMsg'), `${n} 지점을 추가했어요.`, 'ok'); await load(); }
+      catch (err) { setMsg($('branchMsg'), err.message, 'err'); }
+    });
+
+    $('addManager').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('secretBox').hidden = true;
+      try {
+        const j = await api('POST', { action: 'manager', email: $('mEmail').value.trim(), branch_id: Number($('mBranch').value) });
+        $('mEmail').value = '';
+        setMsg($('managerMsg'), '');
+        await load();
+        showSecret(j.email, j.password);
+      } catch (err) { setMsg($('managerMsg'), err.message, 'err'); }
+    });
+
+    $('managers').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-reset]');
+      if (!b || !confirm('이 점장의 비밀번호를 새로 만들까요? 예전 비밀번호로는 더 이상 로그인할 수 없어요.')) return;
+      $('secretBox').hidden = true;
+      try { const j = await api('POST', { action: 'reset', user_id: b.dataset.reset }); setMsg($('managerMsg'), ''); showSecret(j.email, j.password); }
+      catch (err) { setMsg($('managerMsg'), err.message, 'err'); }
+    });
+
+    const now = new Date();
+    $('month').value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    if (getPw()) load().catch(() => {}); else $('pw').focus();
+  </script>
+</body>
+</html>
