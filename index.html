@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>알바 급여 계산기</title>
+  <meta name="description" content="시급이랑 근무시간만 넣으면 알바 하루 급여와 한 달 급여가 바로 나와요. (주휴수당 미포함)">
+  <meta property="og:title" content="알바 급여 계산기">
+  <meta property="og:description" content="시급이랑 근무시간만 넣으면, 알바 급여가 바로 나와요.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fbf5ec;
+      --card: #fffdf9;
+      --ink: #3b2a20;
+      --muted: #7d6656;
+      --line: #ead9c6;
+      --accent: #c8643b;
+      --accent-ink: #ffffff;
+      --accent-soft: #f6e3d4;
+      --note-bg: #fff3dc;
+      --note-ink: #7a4a12;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Noto Sans KR", system-ui, sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 560px; margin: 0 auto; padding: 40px 16px 64px; }
+
+    header { text-align: center; margin-bottom: 28px; }
+    .badge {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      font-family: "Gowun Dodum", "Noto Sans KR", sans-serif;
+      font-weight: 400;
+      font-size: clamp(26px, 6.4vw, 34px);
+      line-height: 1.35;
+      margin: 0 0 10px;
+      word-break: keep-all;
+    }
+    .lead { color: var(--muted); margin: 0; word-break: keep-all; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 24px 20px;
+      box-shadow: 0 6px 24px rgba(120, 80, 40, 0.07);
+    }
+
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-weight: 700; margin-bottom: 6px; }
+    .field .hint { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 4px; }
+    .input-box {
+      display: flex;
+      align-items: center;
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 0 14px;
+      transition: border-color .15s;
+    }
+    .input-box:focus-within { border-color: var(--accent); }
+    .input-box input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font: inherit;
+      font-size: 18px;
+      color: var(--ink);
+      padding: 13px 0;
+    }
+    .input-box .unit { color: var(--muted); font-size: 15px; margin-left: 8px; }
+    .error { color: #b3261e; font-size: 13px; margin: 6px 0 0; min-height: 0; }
+    .error:empty { display: none; }
+
+    button.calc {
+      width: 100%;
+      margin-top: 6px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font: inherit;
+      font-size: 18px;
+      font-weight: 700;
+      padding: 16px;
+      cursor: pointer;
+      transition: transform .05s, filter .15s;
+    }
+    button.calc:hover { filter: brightness(1.05); }
+    button.calc:active { transform: translateY(1px); }
+
+    .result { margin-top: 22px; }
+    .result[hidden] { display: none; }
+    .rows { display: grid; gap: 12px; }
+    .row {
+      background: var(--accent-soft);
+      border-radius: 14px;
+      padding: 16px 18px;
+    }
+    .row .label { font-size: 14px; color: var(--muted); }
+    .row .amount {
+      font-size: clamp(26px, 7.5vw, 32px);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      word-break: keep-all;
+    }
+    .row .amount small { font-size: 18px; font-weight: 500; margin-left: 2px; }
+    .row.muted .amount { font-size: 16px; font-weight: 500; color: var(--muted); }
+
+    .note {
+      margin-top: 12px;
+      background: var(--note-bg);
+      color: var(--note-ink);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      word-break: keep-all;
+    }
+
+    section.info { margin-top: 32px; }
+    section.info h2 {
+      font-family: "Gowun Dodum", "Noto Sans KR", sans-serif;
+      font-weight: 400;
+      font-size: 20px;
+      margin: 0 0 12px;
+    }
+    section.info ul { margin: 0; padding-left: 20px; color: var(--ink); }
+    section.info li { margin-bottom: 6px; word-break: keep-all; }
+    .formula {
+      background: var(--card);
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .reviews {
+      text-align: center;
+      color: var(--muted);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <span class="badge">사장님용</span>
+      <h1>시급이랑 근무시간만 넣으면,<br>알바 급여가 바로 나와요.</h1>
+      <p class="lead">하루 급여와 한 달 급여를 한눈에 확인하세요.</p>
+    </header>
+
+    <form class="card" id="calc-form" novalidate>
+      <div class="field">
+        <label for="wage">시급</label>
+        <div class="input-box">
+          <input id="wage" name="wage" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 10,000">
+          <span class="unit">원</span>
+        </div>
+        <p class="error" id="wage-error"></p>
+      </div>
+
+      <div class="field">
+        <label for="hours">하루 근무시간</label>
+        <div class="input-box">
+          <input id="hours" name="hours" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 6">
+          <span class="unit">시간</span>
+        </div>
+        <p class="error" id="hours-error"></p>
+      </div>
+
+      <div class="field">
+        <label for="days">한 달 근무일수 <span class="hint">(한 달 급여를 보려면 넣어 주세요)</span></label>
+        <div class="input-box">
+          <input id="days" name="days" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 20">
+          <span class="unit">일</span>
+        </div>
+        <p class="error" id="days-error"></p>
+      </div>
+
+      <button type="submit" class="calc">계산하기</button>
+
+      <div class="result" id="result" hidden aria-live="polite">
+        <div class="rows">
+          <div class="row">
+            <div class="label">하루 급여</div>
+            <div class="amount" id="daily"></div>
+          </div>
+          <div class="row" id="monthly-row">
+            <div class="label">한 달 급여</div>
+            <div class="amount" id="monthly"></div>
+          </div>
+        </div>
+        <p class="note">※ 주휴수당·야간수당·세금은 포함하지 않은 금액이에요.</p>
+      </div>
+    </form>
+
+    <section class="info">
+      <h2>이렇게 계산해요</h2>
+      <ul>
+        <li>하루 급여 = 시급 × 하루 근무시간</li>
+        <li>한 달 급여 = 하루 급여 × 한 달 근무일수</li>
+      </ul>
+      <div class="formula">
+        포함하지 않은 것: 주휴수당, 야간·연장 수당, 3.3% 세금, 4대보험 공제.<br>
+        입력한 숫자는 이 화면에서만 계산되고 어디에도 저장되지 않아요.
+      </div>
+    </section>
+
+    <section class="info">
+      <h2>사장님 후기</h2>
+      <div class="reviews">후기는 준비 중이에요.</div>
+    </section>
+
+    <footer>알바 급여 계산기</footer>
+  </main>
+
+  <script>
+    (function () {
+      var form = document.getElementById('calc-form');
+      var fields = {
+        wage: document.getElementById('wage'),
+        hours: document.getElementById('hours'),
+        days: document.getElementById('days')
+      };
+
+      function parse(value) {
+        var cleaned = String(value).replace(/[,\s]/g, '');
+        if (cleaned === '') return null;
+        if (!/^\d+(\.\d+)?$/.test(cleaned)) return NaN;
+        return Number(cleaned);
+      }
+
+      function won(n) {
+        return Math.round(n).toLocaleString('ko-KR') + '<small>원</small>';
+      }
+
+      function setError(name, msg) {
+        document.getElementById(name + '-error').textContent = msg || '';
+      }
+
+      // 시급 칸: 입력하면서 천 단위 쉼표
+      fields.wage.addEventListener('input', function () {
+        var digits = this.value.replace(/[^\d]/g, '');
+        this.value = digits ? Number(digits).toLocaleString('ko-KR') : '';
+      });
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var wage = parse(fields.wage.value);
+        var hours = parse(fields.hours.value);
+        var days = parse(fields.days.value);
+        var ok = true;
+
+        setError('wage'); setError('hours'); setError('days');
+
+        if (wage === null || isNaN(wage) || wage <= 0) {
+          setError('wage', '시급을 숫자로 넣어 주세요.'); ok = false;
+        }
+        if (hours === null || isNaN(hours) || hours <= 0 || hours > 24) {
+          setError('hours', '하루 근무시간을 0보다 크고 24 이하로 넣어 주세요.'); ok = false;
+        }
+        if (days !== null && (isNaN(days) || days <= 0 || days > 31 || days % 1 !== 0)) {
+          setError('days', '한 달 근무일수를 1~31 사이 숫자로 넣어 주세요.'); ok = false;
+        }
+        if (!ok) { document.getElementById('result').hidden = true; return; }
+
+        var daily = wage * hours;
+        document.getElementById('daily').innerHTML = won(daily);
+
+        var monthlyRow = document.getElementById('monthly-row');
+        var monthly = document.getElementById('monthly');
+        if (days === null) {
+          monthlyRow.classList.add('muted');
+          monthly.textContent = '한 달 근무일수를 넣으면 보여 드려요.';
+        } else {
+          monthlyRow.classList.remove('muted');
+          monthly.innerHTML = won(daily * days);
+        }
+
+        document.getElementById('result').hidden = false;
+      });
+    })();
+  </script>
+</body>
+</html>
