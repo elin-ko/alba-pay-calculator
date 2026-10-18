@@ -100,6 +100,8 @@
     }
 
     function render() {
+      // 지점은 늘 ㄱㄴㄷ순 (영어·숫자가 섞여도 한국어 기준으로)
+      data.branches.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
       const name = new Map(data.branches.map((b) => [b.id, b.name]));
       // 지점별 · 직원별 합계
       const per = new Map();
