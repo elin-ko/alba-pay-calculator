@@ -12,16 +12,17 @@
 </head>
 <body>
   <main class="wrap">
-    <div class="topbar">
-      <div>
-        <div class="branch" id="branch">불러오는 중…</div>
-        <div class="muted" id="who"></div>
-      </div>
-      <div class="inline">
-        <a class="btn ghost small" href="/month" style="display:inline-flex;align-items:center;text-decoration:none;border:1px solid var(--line);background:transparent;color:var(--accent-dark)">한 달 표</a>
-        <button class="ghost small" id="logout" type="button">로그아웃</button>
-      </div>
+    <nav class="nav">
+      <a href="/app" class="on">하루씩 적기</a>
+      <a href="/month">한 달 표</a>
+      <a href="/admin">지점 관리</a>
+      <button id="logout" type="button">나가기</button>
+    </nav>
+    <div class="branch-pick">
+      <label for="branchSel">지점</label>
+      <select id="branchSel"></select>
     </div>
+    <p class="muted" id="noBranch" hidden>아직 지점이 없어요. <a href="/admin">지점 관리</a>에서 먼저 지점을 추가해 주세요.</p>
 
     <section class="card">
       <div class="datebar">
@@ -68,7 +69,7 @@
 
   <script src="/assets/auth.js"></script>
   <script>
-    if (!Auth.session()) location.replace('/');
+    if (!Auth.signedIn()) location.replace('/');
 
     const $ = (id) => document.getElementById(id);
     const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -93,7 +94,7 @@
     async function load(date) {
       setMsg($('saveMsg'), '불러오는 중…');
       try {
-        const j = await Auth.api('/api/data?date=' + encodeURIComponent(date));
+        const j = await Auth.api('/api/data?date=' + encodeURIComponent(date) + '&branch_id=' + encodeURIComponent(Auth.branch()));
         state = j;
         dirty = false;
         render();
@@ -104,8 +105,9 @@
     }
 
     function render() {
-      $('branch').textContent = state.branch.name;
-      $('who').textContent = state.email;
+      $('branchSel').innerHTML = state.branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+      $('noBranch').hidden = Boolean(state.branch);
+      if (state.branch) { $('branchSel').value = state.branch.id; Auth.setBranch(state.branch.id); }
       $('date').value = state.date;
       const [y, m, d] = state.date.split('-').map(Number);
       const dow = DAYS[new Date(y, m - 1, d).getDay()];
@@ -155,6 +157,7 @@
       const p = e.target.closest('.person');
       if (!p) return;
       dirty = true;
+      warned = false;
       const st = p.querySelector('[data-k=start]').value, en = p.querySelector('[data-k=end]').value;
       const mins = between(st, en);
       p.querySelector('.person-hours').textContent = mins ? hm(mins) : '';
@@ -171,7 +174,7 @@
       btn.disabled = true;
       setMsg($('saveMsg'), '저장하는 중…');
       try {
-        await Auth.api('/api/shifts', { method: 'POST', body: JSON.stringify({ date: state.date, entries }) });
+        await Auth.api('/api/shifts', { method: 'POST', body: JSON.stringify({ branch_id: state.branch.id, date: state.date, entries }) });
         await load(state.date);
         setMsg($('saveMsg'), '저장했어요. 이번 달 합계도 바뀌었어요.', 'ok');
       } catch (err) {
@@ -181,11 +184,26 @@
       }
     });
 
+    // 팝업(confirm) 대신: 저장 안 한 기록이 있으면 한 번 알려 주고, 한 번 더 누르면 이동
+    let warned = false;
+    function blocked() {
+      if (!dirty || warned) { warned = false; return false; }
+      warned = true;
+      $('date').value = state.date;
+      if (state.branch) $('branchSel').value = state.branch.id;
+      setMsg($('saveMsg'), '저장하지 않은 기록이 있어요. 먼저 [기록 저장]을 누르거나, 한 번 더 바꾸면 저장하지 않고 이동해요.', 'err');
+      return true;
+    }
     function go(date) {
-      if (!date) return;
-      if (dirty && !confirm('저장하지 않은 기록이 있어요. 그래도 다른 날로 갈까요?')) { $('date').value = state.date; return; }
+      if (!date || blocked()) return;
       load(date);
     }
+    $('branchSel').addEventListener('change', (e) => {
+      const id = e.target.value;
+      if (blocked()) return;
+      Auth.setBranch(id);
+      load(state.date);
+    });
     $('prev').addEventListener('click', () => go(shiftDate(state.date, -1)));
     $('next').addEventListener('click', () => go(shiftDate(state.date, 1)));
     $('date').addEventListener('change', (e) => go(e.target.value));
@@ -195,7 +213,7 @@
       const name = e.target.name.value.trim();
       if (!name) { setMsg($('staffMsg'), '직원 이름을 적어 주세요.', 'err'); return; }
       try {
-        await Auth.api('/api/staff', { method: 'POST', body: JSON.stringify({ name }) });
+        await Auth.api('/api/staff', { method: 'POST', body: JSON.stringify({ branch_id: state.branch.id, name }) });
         e.target.name.value = '';
         setMsg($('staffMsg'), `${name} 님을 추가했어요.`, 'ok');
         await load(state.date);
@@ -206,7 +224,7 @@
       const b = e.target.closest('[data-toggle]');
       if (!b) return;
       try {
-        await Auth.api('/api/staff', { method: 'PATCH', body: JSON.stringify({ id: Number(b.dataset.toggle), active: b.dataset.active === '1' }) });
+        await Auth.api('/api/staff', { method: 'PATCH', body: JSON.stringify({ branch_id: state.branch.id, id: Number(b.dataset.toggle), active: b.dataset.active === '1' }) });
         setMsg($('staffMsg'), '');
         await load(state.date);
       } catch (err) { setMsg($('staffMsg'), err.message, 'err'); }
@@ -215,7 +233,7 @@
     $('logout').addEventListener('click', () => Auth.logout());
     window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
-    if (Auth.session()) load(todayStr());
+    if (Auth.signedIn()) load(todayStr());
   </script>
 </body>
 </html>

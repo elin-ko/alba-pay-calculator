@@ -144,3 +144,13 @@ footer { text-align: center; margin-top: 24px; }
 .sheet tfoot td.num { font-size: 16px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .toolbar input[type="month"] { width: auto; }
+
+/* 위쪽 메뉴 + 지점 고르기 */
+.nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.nav a, .nav button { display: inline-flex; align-items: center; min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--accent-dark); font-size: 14px; font-weight: 600; text-decoration: none; }
+.nav a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.nav button { margin-left: auto; cursor: pointer; }
+.nav button:hover { background: var(--accent-soft); }
+.branch-pick { margin-bottom: 16px; }
+.branch-pick select { font-family: "Gowun Batang", serif; font-weight: 700; font-size: 20px; background: var(--card); }
+.wide .branch-pick select { max-width: 360px; }

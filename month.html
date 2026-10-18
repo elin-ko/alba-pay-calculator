@@ -12,16 +12,17 @@
 </head>
 <body>
   <main class="wrap wide">
-    <div class="topbar">
-      <div>
-        <div class="branch" id="branch">불러오는 중…</div>
-        <div class="muted">한 달 표 · 아르바이트</div>
-      </div>
-      <div class="inline">
-        <a class="btn ghost small" href="/app" style="display:inline-flex;align-items:center;text-decoration:none;border:1px solid var(--line);background:transparent;color:var(--accent-dark)">하루씩 적기</a>
-        <button class="ghost small" id="logout" type="button">로그아웃</button>
-      </div>
+    <nav class="nav">
+      <a href="/app">하루씩 적기</a>
+      <a href="/month" class="on">한 달 표</a>
+      <a href="/admin">지점 관리</a>
+      <button id="logout" type="button">나가기</button>
+    </nav>
+    <div class="branch-pick">
+      <label for="branchSel">지점</label>
+      <select id="branchSel"></select>
     </div>
+    <p class="muted" id="noBranch" hidden>아직 지점이 없어요. <a href="/admin">지점 관리</a>에서 먼저 지점을 추가해 주세요.</p>
 
     <div class="toolbar">
       <button class="ghost small" id="prev" type="button" aria-label="전달">◀</button>
@@ -46,7 +47,7 @@
 
   <script src="/assets/auth.js"></script>
   <script>
-    if (!Auth.session()) location.replace('/');
+    if (!Auth.signedIn()) location.replace('/');
 
     const $ = (id) => document.getElementById(id);
     const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -71,7 +72,7 @@
     async function load(month) {
       setMsg('불러오는 중…');
       try {
-        state = await Auth.api('/api/data?date=' + month + '-01');
+        state = await Auth.api('/api/data?date=' + month + '-01&branch_id=' + encodeURIComponent(Auth.branch()));
         changed.clear();
         render();
         setMsg('');
@@ -80,7 +81,9 @@
 
     function render() {
       const month = state.month;
-      $('branch').textContent = state.branch.name;
+      $('branchSel').innerHTML = state.branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+      $('noBranch').hidden = Boolean(state.branch);
+      if (state.branch) { $('branchSel').value = state.branch.id; Auth.setBranch(state.branch.id); }
       $('month').value = month;
       const has = new Set(state.shifts.map((s) => s.staff_id));
       people = state.staff.filter((s) => s.active || has.has(s.id));
@@ -143,6 +146,7 @@
       if (!inp.dataset.s) return;
       const tr = inp.closest('tr');
       changed.add(`${tr.dataset.date}|${inp.dataset.s}`);
+      warned = false;
       tr.querySelectorAll(`[data-s="${inp.dataset.s}"]`).forEach((x) => x.classList.add('changed'));
       updateRow(tr);
       updateTotals();
@@ -160,25 +164,40 @@
       btn.disabled = true;
       setMsg('저장하는 중…');
       try {
-        await Auth.api('/api/shifts', { method: 'POST', body: JSON.stringify({ entries }) });
+        await Auth.api('/api/shifts', { method: 'POST', body: JSON.stringify({ branch_id: state.branch.id, entries }) });
         await load(state.month);
         setMsg('저장했어요.', 'ok');
       } catch (err) { setMsg(err.message, 'err'); }
       finally { btn.disabled = false; }
     });
 
+    // 팝업(confirm) 대신: 저장 안 한 칸이 있으면 한 번 알려 주고, 한 번 더 바꾸면 이동
+    let warned = false;
+    function blocked() {
+      if (!changed.size || warned) { warned = false; return false; }
+      warned = true;
+      $('month').value = state.month;
+      if (state.branch) $('branchSel').value = state.branch.id;
+      setMsg('저장하지 않은 칸이 있어요. 먼저 [기록 저장]을 누르거나, 한 번 더 바꾸면 저장하지 않고 이동해요.', 'err');
+      return true;
+    }
     function go(month) {
-      if (!month) return;
-      if (changed.size && !confirm('저장하지 않은 칸이 있어요. 그래도 다른 달로 갈까요?')) { $('month').value = state.month; return; }
+      if (!month || blocked()) return;
       load(month);
     }
+    $('branchSel').addEventListener('change', (e) => {
+      const id = e.target.value;
+      if (blocked()) return;
+      Auth.setBranch(id);
+      load(state.month);
+    });
     $('prev').addEventListener('click', () => go(addMonth(state.month, -1)));
     $('next').addEventListener('click', () => go(addMonth(state.month, 1)));
     $('month').addEventListener('change', (e) => go(e.target.value));
     $('logout').addEventListener('click', () => Auth.logout());
     window.addEventListener('beforeunload', (e) => { if (changed.size) { e.preventDefault(); e.returnValue = ''; } });
 
-    if (Auth.session()) load(today.slice(0, 7));
+    if (Auth.signedIn()) load(today.slice(0, 7));
   </script>
 </body>
 </html>

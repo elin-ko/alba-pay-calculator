@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>근무시간 기록 — 점장 로그인</title>
+  <title>근무시간 기록</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap">
@@ -15,22 +15,18 @@
     <section class="hero">
       <p class="eyebrow">우리 매장 근무시간 기록</p>
       <h1>출·퇴근 시각만 적으세요.<br>한 달 근무시간은 알아서 더해 드려요.</h1>
-      <p class="muted">점장님이 매일 직원별 출근·퇴근 시각을 적으면, 이번 달 직원별 총 근무시간이 바로 바뀌어요.</p>
+      <p class="muted">매일 직원별 출근·퇴근 시각을 적으면, 이번 달 직원별 총 근무시간이 바로 바뀌어요. 모든 지점을 같이 보고 적을 수 있어요.</p>
     </section>
 
     <form id="login" class="card" novalidate>
-      <h2>점장 로그인</h2>
+      <h2>들어가기</h2>
       <div class="field">
-        <label for="email">이메일</label>
-        <input id="email" type="email" autocomplete="username" required>
+        <label for="password">공용 비밀번호</label>
+        <input id="password" type="password" inputmode="numeric" autocomplete="current-password" required>
       </div>
-      <div class="field">
-        <label for="password">비밀번호</label>
-        <input id="password" type="password" autocomplete="current-password" required>
-      </div>
-      <button class="full" type="submit">로그인</button>
+      <button class="full" type="submit">들어가기</button>
       <p id="msg" class="msg err" role="alert"></p>
-      <p class="muted">계정은 사장님이 만들어 드려요. 비밀번호를 잊었으면 사장님께 말씀해 주세요.</p>
+      <p class="muted">비밀번호는 사장님께 물어보세요.</p>
     </form>
 
     <footer class="muted"><a href="/privacy">개인정보 처리방침</a></footer>
@@ -38,18 +34,17 @@
 
   <script src="/assets/auth.js"></script>
   <script>
-    if (Auth.session()) location.replace('/app');
+    if (Auth.signedIn()) location.replace('/app');
     const form = document.getElementById('login');
     const msg = document.getElementById('msg');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = form.email.value.trim();
-      const password = form.password.value;
-      if (!email || !password) { msg.textContent = '이메일과 비밀번호를 적어 주세요.'; return; }
+      const pw = form.password.value;
+      if (!pw) { msg.textContent = '비밀번호를 넣어 주세요.'; return; }
       const btn = form.querySelector('button');
       btn.disabled = true; msg.textContent = '';
       try {
-        await Auth.login(email, password);
+        await Auth.login(pw);
         location.href = '/app';
       } catch (err) {
         msg.textContent = err.message;
