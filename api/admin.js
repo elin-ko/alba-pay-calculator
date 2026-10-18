@@ -10,8 +10,10 @@ const same = (a, b) => {
   const h = (s) => crypto.createHash('sha256').update(String(s)).digest();
   return crypto.timingSafeEqual(h(a), h(b));
 };
-// 헷갈리는 글자(0/O, 1/l/I)를 뺀 12자 임시 비밀번호
+// 점장 비밀번호: 사장님이 정한 값(Vercel 환경변수 MANAGER_PASSWORD)이 있으면 모두 그 값으로.
+// 없으면 헷갈리는 글자(0/O, 1/l/I)를 뺀 12자 임시 비밀번호. 값은 코드에 적지 않는다(공개 저장소).
 const tempPassword = () => {
+  if (process.env.MANAGER_PASSWORD) return process.env.MANAGER_PASSWORD;
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   return Array.from(crypto.randomBytes(12), (x) => chars[x % chars.length]).join('');
 };
