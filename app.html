@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v=3">
 </head>
 <body>
   <main class="wrap">
@@ -18,8 +18,8 @@
       <a href="/admin">지점 관리</a>
       <button id="logout" type="button">나가기</button>
     </nav>
-    <div class="branch-pick">
-      <label for="branchSel">지점</label>
+    <div class="branch-pick card">
+      <label for="branchSel">📍 어느 지점인가요? (눌러서 바꾸기)</label>
       <select id="branchSel"></select>
     </div>
     <p class="muted" id="noBranch" hidden>아직 지점이 없어요. <a href="/admin">지점 관리</a>에서 먼저 지점을 추가해 주세요.</p>
@@ -67,7 +67,7 @@
     </div>
   </div>
 
-  <script src="/assets/auth.js"></script>
+  <script src="/assets/auth.js?v=3"></script>
   <script>
     if (!Auth.signedIn()) location.replace('/');
 
