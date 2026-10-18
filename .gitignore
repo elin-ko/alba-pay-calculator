@@ -1,3 +1,7 @@
 .env*
 .vercel
 node_modules
+# Vercel CLI가 깔아 둔 도움말(사이트와 무관)
+.agents/
+.claude/skills/
+skills-lock.json
