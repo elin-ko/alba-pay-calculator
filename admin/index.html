@@ -149,12 +149,30 @@
     });
 
     $('branches').addEventListener('click', async (e) => {
+      // 팝업(prompt)은 휴대폰 앱 안 브라우저에서 막히는 일이 많아서, 그 줄에서 바로 고치게 한다
       const b = e.target.closest('[data-rename]');
-      if (!b) return;
-      const n = (prompt('새 지점 이름을 적어 주세요.', b.dataset.name) || '').trim();
-      if (!n || n === b.dataset.name) return;
-      try { await api('POST', { action: 'rename', branch_id: Number(b.dataset.rename), name: n }); setMsg($('branchMsg'), `'${n}'(으)로 바꿨어요.`, 'ok'); await load(); }
-      catch (err) { setMsg($('branchMsg'), err.message, 'err'); }
+      if (b) {
+        const row = b.closest('.list-row');
+        row.innerHTML = `<form class="inline" style="width:100%" data-id="${b.dataset.rename}" data-old="${esc(b.dataset.name)}">
+            <input type="text" maxlength="40" value="${esc(b.dataset.name)}" aria-label="새 지점 이름">
+            <button class="small" type="submit">저장</button>
+            <button class="ghost small" type="button" data-cancel>취소</button></form>`;
+        const inp = row.querySelector('input');
+        inp.focus();
+        inp.select();
+        return;
+      }
+      if (e.target.closest('[data-cancel]')) { setMsg($('branchMsg'), ''); render(); }
+    });
+    $('branches').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const n = f.querySelector('input').value.trim();
+      if (!n) return setMsg($('branchMsg'), '새 지점 이름을 적어 주세요.', 'err');
+      if (n === f.dataset.old) { render(); return; }
+      f.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+      try { await api('POST', { action: 'rename', branch_id: Number(f.dataset.id), name: n }); await load(); setMsg($('branchMsg'), `'${n}'(으)로 바꿨어요.`, 'ok'); }
+      catch (err) { setMsg($('branchMsg'), err.message, 'err'); f.querySelectorAll('button').forEach((x) => { x.disabled = false; }); }
     });
 
     $('addManager').addEventListener('submit', async (e) => {
