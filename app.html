@@ -43,7 +43,7 @@
     <section class="card">
       <h2 id="monthTitle">이번 달 합계</h2>
       <div id="totals"></div>
-      <div class="grand"><span>지점 전체</span><span class="num" id="grand">0시간</span></div>
+      <div class="grand"><span id="grandLabel">지점 전체</span><span class="num" id="grand">0시간</span></div>
       <p class="muted" style="margin-top:10px">총 근무시간만 보여 줘요. 급여·주휴수당·세금은 계산하지 않아요.</p>
     </section>
 
@@ -133,7 +133,8 @@
       }).join('');
 
       // 이번 달 합계
-      $('monthTitle').textContent = `${m}월 합계`;
+      $('monthTitle').textContent = `${m}월 합계 (직원별)`;
+      $('grandLabel').textContent = state.branch ? `${state.branch.name} 직원 모두 더한 시간` : '지점 전체';
       const sum = new Map(), days = new Map();
       for (const s of state.shifts) {
         sum.set(s.staff_id, (sum.get(s.staff_id) || 0) + s.minutes);
