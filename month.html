@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>한 달 표 — 근무시간 기록</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main class="wrap wide">
+    <div class="topbar">
+      <div>
+        <div class="branch" id="branch">불러오는 중…</div>
+        <div class="muted">한 달 표 · 아르바이트</div>
+      </div>
+      <div class="inline">
+        <a class="btn ghost small" href="/app" style="display:inline-flex;align-items:center;text-decoration:none;border:1px solid var(--line);background:transparent;color:var(--accent-dark)">하루씩 적기</a>
+        <button class="ghost small" id="logout" type="button">로그아웃</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="ghost small" id="prev" type="button" aria-label="전달">◀</button>
+      <input id="month" type="month" aria-label="달">
+      <button class="ghost small" id="next" type="button" aria-label="다음 달">▶</button>
+      <span class="muted">칸을 바로 고치고 아래 '기록 저장'을 누르세요. 노란 칸이 저장 안 된 칸이에요.</span>
+    </div>
+
+    <div class="sheet-wrap">
+      <table class="sheet" id="sheet"></table>
+    </div>
+    <p class="muted" id="noStaff" hidden style="margin-top:12px">아직 직원이 없어요. <a href="/app">하루씩 적기</a> 화면 아래 '직원 관리'에서 먼저 직원을 추가해 주세요.</p>
+    <p class="muted" style="margin-top:12px">시·분 = 종료 − 시작. 휴게시간은 빼지 않아요. 종료가 시작보다 이르면 다음 날 종료로 계산해요. 시작·종료를 둘 다 지우고 저장하면 그날 기록이 지워져요.</p>
+  </main>
+
+  <div class="savebar">
+    <div class="inner">
+      <button class="full" id="save" type="button">기록 저장</button>
+      <p class="msg" id="saveMsg" role="status"></p>
+    </div>
+  </div>
+
+  <script src="/assets/auth.js"></script>
+  <script>
+    if (!Auth.session()) location.replace('/');
+
+    const $ = (id) => document.getElementById(id);
+    const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+    const pad = (n) => String(n).padStart(2, '0');
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const setMsg = (t, k) => { const el = $('saveMsg'); el.textContent = t || ''; el.className = 'msg' + (k ? ' ' + k : ''); };
+    const between = (s, e) => {
+      if (!s || !e) return null;
+      const [sh, sm] = s.split(':').map(Number), [eh, em] = e.split(':').map(Number);
+      let d = eh * 60 + em - (sh * 60 + sm);
+      if (d < 0) d += 1440;
+      return d === 0 ? null : d;
+    };
+    const now = new Date();
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    let state = null;
+    let people = [];
+    const changed = new Set(); // "날짜|직원id"
+
+    function addMonth(m, n) { const [y, mo] = m.split('-').map(Number); const d = new Date(y, mo - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
+
+    async function load(month) {
+      setMsg('불러오는 중…');
+      try {
+        state = await Auth.api('/api/data?date=' + month + '-01');
+        changed.clear();
+        render();
+        setMsg('');
+      } catch (err) { setMsg(err.message, 'err'); }
+    }
+
+    function render() {
+      const month = state.month;
+      $('branch').textContent = state.branch.name;
+      $('month').value = month;
+      const has = new Set(state.shifts.map((s) => s.staff_id));
+      people = state.staff.filter((s) => s.active || has.has(s.id));
+      $('noStaff').hidden = people.length > 0;
+      const rec = new Map(state.shifts.map((s) => [`${s.work_date}|${s.staff_id}`, s]));
+      const [y, m] = month.split('-').map(Number);
+      const last = new Date(y, m, 0).getDate();
+
+      let h = '<thead><tr><th class="date" rowspan="2">날짜</th>';
+      h += people.map((p) => `<th colspan="4" class="group-end">${esc(p.name)}${p.active ? '' : ' (그만둠)'}</th>`).join('');
+      h += '</tr><tr>' + people.map(() => '<th>시작</th><th>종료</th><th>시</th><th class="group-end">분</th>').join('') + '</tr></thead><tbody>';
+      for (let d = 1; d <= last; d++) {
+        const date = `${month}-${pad(d)}`;
+        const dow = new Date(y, m - 1, d).getDay();
+        const cls = [dow === 0 ? 'sun' : dow === 6 ? 'sat' : '', date === today ? 'today' : ''].join(' ');
+        h += `<tr class="${cls}" data-date="${date}"><th class="date">${pad(m)}월${pad(d)}일 (${DAYS[dow]})</th>`;
+        for (const p of people) {
+          const r = rec.get(`${date}|${p.id}`);
+          const st = r ? r.start_time.slice(0, 5) : '', en = r ? r.end_time.slice(0, 5) : '';
+          h += `<td><input type="time" data-s="${p.id}" data-k="start" value="${st}" aria-label="${esc(p.name)} ${d}일 시작"></td>`
+            + `<td><input type="time" data-s="${p.id}" data-k="end" value="${en}" aria-label="${esc(p.name)} ${d}일 종료"></td>`
+            + `<td class="num" data-h="${p.id}"></td><td class="num group-end" data-m="${p.id}"></td>`;
+        }
+        h += '</tr>';
+      }
+      h += '</tbody><tfoot><tr><td class="date">합계</td>'
+        + people.map((p) => `<td colspan="2"></td><td class="num" data-th="${p.id}"></td><td class="num group-end" data-tm="${p.id}"></td>`).join('')
+        + '</tr></tfoot>';
+      $('sheet').innerHTML = h;
+      $('sheet').querySelectorAll('tbody tr').forEach(updateRow);
+      updateTotals();
+    }
+
+    function cell(el, v) { el.textContent = v == null ? '-' : v; el.classList.toggle('empty', v == null); }
+
+    function updateRow(tr) {
+      for (const p of people) {
+        const st = tr.querySelector(`[data-s="${p.id}"][data-k=start]`).value;
+        const en = tr.querySelector(`[data-s="${p.id}"][data-k=end]`).value;
+        const mins = between(st, en);
+        cell(tr.querySelector(`[data-h="${p.id}"]`), mins == null ? null : Math.floor(mins / 60));
+        cell(tr.querySelector(`[data-m="${p.id}"]`), mins == null ? null : mins % 60);
+      }
+    }
+
+    function updateTotals() {
+      for (const p of people) {
+        let total = 0;
+        $('sheet').querySelectorAll('tbody tr').forEach((tr) => {
+          const mins = between(tr.querySelector(`[data-s="${p.id}"][data-k=start]`).value, tr.querySelector(`[data-s="${p.id}"][data-k=end]`).value);
+          if (mins) total += mins;
+        });
+        cell($('sheet').querySelector(`[data-th="${p.id}"]`), Math.floor(total / 60));
+        cell($('sheet').querySelector(`[data-tm="${p.id}"]`), total % 60);
+      }
+    }
+
+    $('sheet').addEventListener('input', (e) => {
+      const inp = e.target;
+      if (!inp.dataset.s) return;
+      const tr = inp.closest('tr');
+      changed.add(`${tr.dataset.date}|${inp.dataset.s}`);
+      tr.querySelectorAll(`[data-s="${inp.dataset.s}"]`).forEach((x) => x.classList.add('changed'));
+      updateRow(tr);
+      updateTotals();
+      setMsg(`저장하지 않은 칸이 ${changed.size}개 있어요.`);
+    });
+
+    $('save').addEventListener('click', async () => {
+      if (!changed.size) { setMsg('바꾼 칸이 없어요.'); return; }
+      const entries = [...changed].map((k) => {
+        const [date, sid] = k.split('|');
+        const tr = $('sheet').querySelector(`tr[data-date="${date}"]`);
+        return { date, staff_id: Number(sid), start: tr.querySelector(`[data-s="${sid}"][data-k=start]`).value, end: tr.querySelector(`[data-s="${sid}"][data-k=end]`).value };
+      });
+      const btn = $('save');
+      btn.disabled = true;
+      setMsg('저장하는 중…');
+      try {
+        await Auth.api('/api/shifts', { method: 'POST', body: JSON.stringify({ entries }) });
+        await load(state.month);
+        setMsg('저장했어요.', 'ok');
+      } catch (err) { setMsg(err.message, 'err'); }
+      finally { btn.disabled = false; }
+    });
+
+    function go(month) {
+      if (!month) return;
+      if (changed.size && !confirm('저장하지 않은 칸이 있어요. 그래도 다른 달로 갈까요?')) { $('month').value = state.month; return; }
+      load(month);
+    }
+    $('prev').addEventListener('click', () => go(addMonth(state.month, -1)));
+    $('next').addEventListener('click', () => go(addMonth(state.month, 1)));
+    $('month').addEventListener('change', (e) => go(e.target.value));
+    $('logout').addEventListener('click', () => Auth.logout());
+    window.addEventListener('beforeunload', (e) => { if (changed.size) { e.preventDefault(); e.returnValue = ''; } });
+
+    if (Auth.session()) load(today.slice(0, 7));
+  </script>
+</body>
+</html>
