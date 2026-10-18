@@ -118,7 +118,8 @@
           <button class="ghost small" type="button" data-reset="${m.user_id}">비밀번호 새로</button></div>`).join('') : '<p class="muted">아직 점장 계정이 없어요.</p>';
 
       $('mBranch').innerHTML = data.branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
-      $('branches').innerHTML = data.branches.map((b) => `<div class="list-row"><span>${esc(b.name)}</span><span class="tag">직원 ${data.staff.filter((s) => s.branch_id === b.id && s.active).length}명</span></div>`).join('') || '<p class="muted">아직 지점이 없어요.</p>';
+      $('branches').innerHTML = data.branches.map((b) => `<div class="list-row"><span>${esc(b.name)}<br><span class="tag">직원 ${data.staff.filter((s) => s.branch_id === b.id && s.active).length}명</span></span>
+          <button class="ghost small" type="button" data-rename="${b.id}" data-name="${esc(b.name)}">이름 바꾸기</button></div>`).join('') || '<p class="muted">아직 지점이 없어요.</p>';
     }
 
     function showSecret(email, pw) {
@@ -142,6 +143,15 @@
       const n = e.target.name.value.trim();
       if (!n) return setMsg($('branchMsg'), '지점 이름을 적어 주세요.', 'err');
       try { await api('POST', { action: 'branch', name: n }); e.target.name.value = ''; setMsg($('branchMsg'), `${n} 지점을 추가했어요.`, 'ok'); await load(); }
+      catch (err) { setMsg($('branchMsg'), err.message, 'err'); }
+    });
+
+    $('branches').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-rename]');
+      if (!b) return;
+      const n = (prompt('새 지점 이름을 적어 주세요.', b.dataset.name) || '').trim();
+      if (!n || n === b.dataset.name) return;
+      try { await api('POST', { action: 'rename', branch_id: Number(b.dataset.rename), name: n }); setMsg($('branchMsg'), `'${n}'(으)로 바꿨어요.`, 'ok'); await load(); }
       catch (err) { setMsg($('branchMsg'), err.message, 'err'); }
     });
 

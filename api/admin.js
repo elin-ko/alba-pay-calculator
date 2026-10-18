@@ -49,6 +49,17 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
+    if (b.action === 'rename') {
+      const id = Number(b.branch_id);
+      const name = String(b.name || '').trim().slice(0, 40);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: '잘못된 요청이에요.' });
+      if (!name) return res.status(400).json({ error: '새 지점 이름을 적어 주세요.' });
+      const r = await sb(`branches?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ name }) });
+      if (r.status === 409) return res.status(400).json({ error: '이미 있는 지점 이름이에요.' });
+      if (!r.ok) return res.status(500).json({ error: '이름을 바꾸지 못했어요.' });
+      return res.status(200).json({ ok: true });
+    }
+
     if (b.action === 'manager') {
       const email = String(b.email || '').trim().toLowerCase().slice(0, 120);
       const branchId = Number(b.branch_id);
